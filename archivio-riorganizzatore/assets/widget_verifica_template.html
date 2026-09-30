@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="it">
+<!--
+  TEMPLATE WIDGET VERIFICA — archivio-riorganizzatore v1.2.1 (Fase 4)
+  Stampo canonico per la verifica post-esecuzione (+ riconciliazione con backup di riferimento).
+  Derivato da un widget di verifica usato su un archivio reale (2026-06-13).
+  Claude INIETTA i dati nei punti [SEGNAPOSTO] e replica le righe segnate "ripeti"; NON riscrivere CSS/JS.
+  Convenzioni:
+   - 3 classi esclusive che SOMMANO al totale: congruenze / incongruenze volute / mismatch imprevisti
+   - ogni "voluta" DEVE avere fonte documentale (decisione + esecuzione); senza fonte → imprevisto
+   - percorsi sempre assoluti e completi; pagina statica: nessuna azione parte da qui
+   - blocchi opzionali (sweep, rinomine): rimuovere l'intero .blocco se non applicabile
+   - badge canonici fissi; palette REGOLE_WIDGET.md; id senza variabili globali (sempre getElementById)
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verifica — [NOME_PROGETTO]</title>
+<style>
+:root{
+  color-scheme: dark;
+  --b-rinomina:#8ab0db; --b-sposta:#92c2a2; --b-merge:#dab184; --b-elimina:#dc9690;
+  --b-crea:#85c5bd; --b-flatten:#b7a6d6; --b-verifica:#d6a2bc;
+  --ok:#83c994; --warn:#d8bd86; --bad:#d189a6;
+  --bg:#08080a; --card:#131316; --card2:#18181b; --ink:#e6e6ea; --muted:#8b8b94; --line:#242428;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:21px;margin-bottom:3px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.path{font-family:ui-monospace,Menlo,monospace;background:#242428;padding:1px 5px;border-radius:4px;font-size:12px;color:#cfcfd6}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--ok);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.box b{color:#a8e0b0}
+.kpis{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;text-align:center;flex:1;min-width:118px}
+.kpi .n{font-size:22px;font-weight:700}
+.kpi .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.bars{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.bars .row{display:flex;align-items:center;gap:10px;margin:7px 0}
+.bars .lab{width:215px;font-size:12.5px;color:#cfcfd6}
+.bars .track{flex:1;height:10px;background:#222226;border-radius:6px;overflow:hidden}
+.bars .fill{height:100%;border-radius:6px}
+.bars .val{width:120px;text-align:right;font-size:12px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.blocco{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.blocco-h{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--card2);border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+.blocco-h:hover{background:#222226}
+.blocco-t{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:9px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.cnt{font-size:11.5px;font-weight:700;color:#0a0a0b;border-radius:10px;padding:2px 9px}
+.chev{font-size:16px;color:var(--muted);transition:transform .2s}
+.blocco.col .chev{transform:rotate(-90deg)}
+.blocco.col .blocco-body{display:none}
+.blocco-body{padding:13px 18px}
+table{width:100%;border-collapse:collapse;font-size:12.8px}
+th{text-align:left;color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;padding:5px 8px;border-bottom:1px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid #1c1c20;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+.src{color:#9a8d7d;font-size:11px;font-style:italic}
+.badge{font-size:10px;font-weight:700;letter-spacing:.3px;color:#0a0a0b;padding:2px 8px;border-radius:9px;text-transform:uppercase;white-space:nowrap}
+.bd-SPOSTA{background:var(--b-sposta)}.bd-RINOMINA{background:var(--b-rinomina)}.bd-ELIMINA{background:var(--b-elimina)}
+.bd-MERGE{background:var(--b-merge)}.bd-CREA{background:var(--b-crea)}.bd-VERIFICA{background:var(--b-verifica)}
+.arrow{color:#55555e;padding:0 4px}
+.tree{font-family:ui-monospace,Menlo,monospace;font-size:11.8px;line-height:1.85;white-space:pre;color:#c8c8d0;background:#0d0d10;border:1px solid var(--line);border-radius:9px;padding:12px 14px;overflow-x:auto}
+.tree .lv1{color:var(--ink);font-weight:700}
+.tree .lv3{color:var(--muted)}
+.tree .br{color:#55555e}
+.tree .hl{color:#a8d8b0}
+.regole{list-style:none}
+.regole li{padding:7px 0 7px 26px;position:relative;font-size:13px;border-bottom:1px solid #1c1c20}
+.regole li:last-child{border-bottom:none}
+.regole li::before{content:"▸";position:absolute;left:8px;color:var(--b-crea)}
+.regole b{color:#9fd4cc}
+.pill{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:10px;margin-right:5px}
+.p-nostro{background:rgba(146,194,162,.18);color:#a8d8b0}
+.p-pre{background:rgba(139,139,148,.16);color:#a9a9b2}
+.p-sys{background:rgba(183,166,214,.16);color:#c5b8de}
+.p-mix{background:rgba(218,177,132,.18);color:#e0c49a}
+.note{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.6}
+.foot{margin-top:20px;padding-top:13px;border-top:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.7}
+.searchbar{margin-bottom:9px}
+.searchbar input{width:100%;padding:7px 11px;border:1px solid #2a3f5f;background:#101015;color:var(--ink);border-radius:8px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Verifica finale · <span style="color:#92c2a2">[NOME_PROGETTO]</span></h1>
+  <div class="sub">Fase 4 archivio-riorganizzatore · <span class="path">[PERCORSO_TARGET]</span> · [DATA] · [FONTE_CONFRONTO: diff cache↔disco / riconciliazione con backup X]</div>
+
+  <div class="box"><b>[TOTALE] file su [TOTALE] spiegati.</b> [VERDETTO_TESTO: percentuali vivi / voluti / imprevisti, stato imprevisti, prossimo gate — 2-3 frasi, numeri chiave in grassetto]</div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="n" style="color:var(--ok)">[N]</div><div class="l">Identici al loro posto</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-sposta)">[N]</div><div class="l">Vivi, ricollocati</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-merge)">[N]</div><div class="l">Eliminati voluti</div></div>
+    <div class="kpi"><div class="n" style="color:var(--bad)">[N] → [N]</div><div class="l">Imprevisti (risolti)</div></div>
+  </div>
+
+  <div class="bars">
+    <div class="row"><span class="lab">Congruenze (vivi oggi)</span><div class="track"><div class="fill" style="width:[PCT]%;background:var(--ok)"></div></div><span class="val">[N] · [PCT]%</span></div>
+    <div class="row"><span class="lab">Incongruenze volute (documentate)</span><div class="track"><div class="fill" style="width:[PCT]%;background:var(--b-merge)"></div></div><span class="val">[N] · [PCT]%</span></div>
+    <div class="row"><span class="lab">Mismatch imprevisti</span><div class="track"><div class="fill" style="width:[PCT_MIN_0.5]%;background:var(--bad)"></div></div><span class="val">[N] · [PCT]% [→ esito]</span></div>
+  </div>
+
+  <!-- ===== CONGRUENZE (chiuso di default: class="blocco col") ===== -->
+  <div class="blocco col" id="b1">
+    <div class="blocco-h" onclick="tg('b1')">
+      <span class="blocco-t"><span class="dot" style="background:var(--ok)"></span>Congruenze — dove vive oggi ciò che c'era</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--ok)">[N]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <table>
+        <tr><th>Dove</th><th style="text-align:right">File</th><th>Nota</th></tr>
+        <!-- ripeti riga per destinazione -->
+        <tr><td><span class="path">[percorso assoluto]</span></td><td class="num">[N]</td><td>[come: match nome+size / spostati da X · fonte] <span class="src">[fonte]</span></td></tr>
+        <tr><td>Rinominati (vivi)</td><td class="num">[N]</td><td>stessa sostanza, nome nuovo — v. blocco Rinomine</td></tr>
+        <tr><td>Modificati (vivi)</td><td class="num">[N]</td><td>[es. file di lavoro attivo, size cambiata]</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== INCONGRUENZE VOLUTE (aperto di default) ===== -->
+  <div class="blocco" id="b2">
+    <div class="blocco-h" onclick="tg('b2')">
+      <span class="blocco-t"><span class="dot" style="background:var(--b-merge)"></span>Incongruenze volute — eliminazioni con firma</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--b-merge)">[N]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <table>
+        <tr><th>Cosa</th><th style="text-align:right">File</th><th>Decisione · fonte</th></tr>
+        <!-- ripeti riga per categoria; badge coerente col tipo op; SEMPRE la fonte -->
+        <tr><td><span class="badge bd-MERGE">Merge</span> [categoria]</td><td class="num">[N]</td><td>[decisione, data] · <span class="src">[file di decisione + journal/script]</span></td></tr>
+        <tr><td><span class="badge bd-ELIMINA">Elimina</span> [categoria]</td><td class="num">[N]</td><td>[decisione, data] · <span class="src">[fonte]</span></td></tr>
+      </table>
+      <div class="note">Ogni riga ha doppia traccia: la decisione (widget/report) e l'esecuzione (script/journal). [Nota su Cestino/decantazione se applicabile.]</div>
+    </div>
+  </div>
+
+  <!-- ===== MISMATCH IMPREVISTI (aperto di default; se 0: una riga "nessuno") ===== -->
+  <div class="blocco" id="b3">
+    <div class="blocco-h" onclick="tg('b3')">
+      <span class="blocco-t"><span class="dot" style="background:var(--bad)"></span>Mismatch imprevisti — trovati, capiti, risolti</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--bad)">[N] → [N]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <table>
+        <tr><th>File</th><th>Causa</th><th>Rimedio</th></tr>
+        <!-- ripeti; se recuperato: badge VERIFICA "risolto" + dove -->
+        <tr><td><span class="path">[percorso]</span></td><td>[causa accertata]</td><td><span class="badge bd-VERIFICA">[stato]</span> [rimedio + destinazione]</td></tr>
+      </table>
+      <div class="note">[Lezione appresa → candidato fix per la skill, se ce n'è una.]</div>
+    </div>
+  </div>
+
+  <!-- ===== RINOMINE (opzionale; chiuso di default) ===== -->
+  <div class="blocco col" id="b4">
+    <div class="blocco-h" onclick="tg('b4')">
+      <span class="blocco-t"><span class="dot" style="background:var(--b-rinomina)"></span>Rinomine — la grammatica adottata</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--b-rinomina)">[N]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <div class="searchbar"><input type="text" id="q" placeholder="filtra esempi…" oninput="flt()"></div>
+      <table id="rin">
+        <tr><th>Prima</th><th></th><th>Dopo</th><th>Logica</th></tr>
+        <!-- ripeti: 6-10 esempi RAPPRESENTATIVI, non la lista intera -->
+        <tr><td class="path">[vecchio]</td><td class="arrow">→</td><td class="path">[nuovo]</td><td>[perché]</td></tr>
+      </table>
+      <div class="note">[N esempi] dei [TOT] totali (lista completa ricostruibile da: [fonti]). Pattern unico: <b>[grammatica, es. AAAA-MM-GG_cosa.ext]</b>.</div>
+    </div>
+  </div>
+
+  <!-- ===== LOGICA LAYOUT (aperto di default) ===== -->
+  <div class="blocco" id="b5">
+    <div class="blocco-h" onclick="tg('b5')">
+      <span class="blocco-t"><span class="dot" style="background:var(--b-crea)"></span>La logica del nuovo layout</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--b-crea)">[N entità]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <div class="tree"><span class="lv1">[ROOT]\</span>                          <span class="lv3">[N file · GB · vuote]</span>
+<span class="br">├─</span> <span class="hl">[Entità1]\</span>            <span class="lv3">[peso — domini interni]</span>
+<span class="br">└─</span> <span class="hl">[_Servizio]\</span>          <span class="lv3">[peso — contenuto]</span></div>
+      <ul class="regole" style="margin-top:11px">
+        <!-- ripeti: le regole EFFETTIVAMENTE applicate in questo riorg, max 6 -->
+        <li><b>[Regola].</b> [Una frase: cosa e perché.]</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== SWEEP PERIMETRO (opzionale — solo se si è verificato anche il contorno; chiuso) ===== -->
+  <div class="blocco col" id="b6">
+    <div class="blocco-h" onclick="tg('b6')">
+      <span class="blocco-t"><span class="dot" style="background:var(--b-flatten)"></span>Sweep perimetro — [contesto]</span>
+      <span style="display:flex;gap:8px;align-items:center"><span class="cnt" style="background:var(--b-flatten)">[esito]</span><span class="chev">&#9662;</span></span>
+    </div>
+    <div class="blocco-body">
+      <table>
+        <tr><th>Cartella</th><th>Classe</th><th style="text-align:right">Peso</th><th>Nota</th></tr>
+        <!-- ripeti; classi: p-nostro / p-pre / p-sys / p-mix -->
+        <tr><td class="path">[cartella]</td><td><span class="pill p-nostro">NOSTRO</span></td><td class="num">[GB]</td><td>[nota]</td></tr>
+      </table>
+      <div class="note"><b>[Verdetto sweep in una frase.]</b></div>
+    </div>
+  </div>
+
+  <div class="foot">Fonti: [inventari, CSV decisioni, journal, script, report — con percorsi].<br>Pagina statica di verifica — nessuna azione parte da qui. Generata [DATA] · archivio-riorganizzatore v1.2.1 Fase 4.</div>
+</div>
+<script>
+function tg(id){ document.getElementById(id).classList.toggle('col'); }
+function flt(){ var q=document.getElementById('q').value.toLowerCase();
+  var rows=document.querySelectorAll('#rin tr');
+  for(var i=1;i<rows.length;i++){ var t=rows[i].innerText.toLowerCase(); rows[i].style.display=(!q||t.indexOf(q)>-1)?'':'none'; } }
+</script>
+</body>
+</html>

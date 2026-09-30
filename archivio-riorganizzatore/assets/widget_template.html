@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="it">
+<!--
+  TEMPLATE WIDGET PROPOSTA — archivio-riorganizzatore v1.1
+  Stampo canonico per le dashboard di proposta (Fase 2 "Proponi").
+  Regole d'uso e standard cross-progetto: docs/REGOLE_WIDGET.md
+  Claude INIETTA i dati nei punti [SEGNAPOSTO] e replica le righe .op; NON riscrivere CSS/JS.
+  Convenzioni:
+   - badge canonici fissi (RINOMINA blu · SPOSTA verde · MERGE ambra · ELIMINA rosso · CREA teal · FLATTEN viola · VERIFICA rosa), versione pastello su nero
+   - palette decisioni separata dai badge: Approva=verde-d · Scarta=slate · Modifica=oro · "Da verificare"=rosa (tono-su-tono con VERIFICA, shade diverso)
+   - cornice colorata a sinistra di ogni .op = colore dell'azione
+   - id SENZA trattino per gli elementi letti come getElementById in update() NON necessario: usare SEMPRE getElementById (mai variabili globali da id con trattino)
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proposta — [NOME_PROGETTO]</title>
+<style>
+:root{
+  color-scheme: dark;
+  /* badge canonici — versione pastellata per lettura su nero */
+  --b-rinomina:#8ab0db; --b-sposta:#92c2a2; --b-merge:#dab184; --b-elimina:#dc9690;
+  --b-crea:#85c5bd; --b-flatten:#b7a6d6; --b-verifica:#d6a2bc;
+  /* palette decisioni: pastello, distinte dai badge; "Da verificare" tono-su-tono col badge VERIFICA */
+  --d-approva:#83c994; --d-scarta:#9aa0ad; --d-modifica:#d8bd86; --d-verifica:#d189a6;
+  --bg:#08080a; --card:#131316; --card2:#18181b; --ink:#e6e6ea; --muted:#8b8b94;
+  --line:#242428;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14.5px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px 24px 130px}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:21px;margin:0 0 3px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.path{font-family:ui-monospace,Menlo,monospace;background:#242428;padding:1px 5px;border-radius:4px;font-size:12px;color:#cfcfd6}
+.box{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.verdetto{border-left-color:var(--b-rinomina);font-size:13.5px;color:#cfe0f5}
+.verdetto b{color:#7db8ff}
+.verdetto code{background:#1e2a3d;color:#9ec5ff;padding:1px 5px;border-radius:4px;font-size:12.5px}
+.box-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;transition:grid-template-columns .25s ease}
+.ba.show-before{grid-template-columns:1fr 40px}
+.ba.show-after{grid-template-columns:40px 1fr}
+.ba .col{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow:hidden;cursor:pointer;position:relative}
+.ba .col.before{border-left:4px solid var(--muted)}
+.ba .col.after{border-left:4px solid var(--b-sposta)}
+.ba .col.collapsed{padding:10px 0;display:flex;align-items:center;justify-content:center}
+.ba .col.collapsed .full{display:none}
+.ba .col .vlabel{display:none}
+.ba .col.collapsed .vlabel{display:block;writing-mode:vertical-rl;transform:rotate(180deg);font-size:9.5px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.ba .col.after.collapsed .vlabel{color:var(--b-sposta)}
+.ba .h{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.ba .h .hint{font-weight:400;font-size:9.5px;text-transform:none;letter-spacing:0;opacity:.6}
+.ba .h.aft{color:var(--b-sposta)}
+.tree{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:1.8;white-space:pre;color:#c8c8d0;transition:font-size .2s}
+.tree .lv1{color:var(--ink);font-weight:700}
+.tree .lv2{color:#cdcdd5}
+.tree .lv3{color:var(--muted)}
+.tree .chg{color:var(--d-approva);font-weight:700}
+.tree .old{color:var(--b-elimina)}
+.tree .br{color:#55555e}
+.ba.show-before .col.before .tree,
+.ba.show-after  .col.after  .tree{font-size:14px;line-height:2}
+.riep{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.riep .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;text-align:center}
+.riep .stat .n{font-size:22px;font-weight:700}
+.riep .stat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.riep .ext{flex:1;min-width:240px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+.riep .ext .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.chip{display:inline-block;background:#242428;border:1px solid var(--line);border-radius:6px;padding:2px 8px;margin:2px 3px 0 0;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;color:#cfcfd6}
+.chip b{color:#fff}
+.prog{display:flex;align-items:center;gap:16px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 18px;margin-bottom:14px;position:sticky;top:0;z-index:20}
+.prog .lbl{font-size:13px;font-weight:600;white-space:nowrap}
+.prog .track{flex:1;height:8px;background:#26262b;border-radius:5px;overflow:hidden}
+.prog .fill{height:100%;width:0;background:#8aa0c0;border-radius:5px;transition:width .3s}
+.prog .pct{font-size:13px;font-weight:700;color:#8aa0c0;white-space:nowrap}
+.kpis{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;text-align:center;flex:1;min-width:84px}
+.kpi .n{font-size:23px;font-weight:700}.kpi .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.toggle{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;margin-bottom:14px}
+.toggle button{border:0;background:transparent;padding:7px 16px;border-radius:999px;cursor:pointer;font-size:13px;color:var(--muted);font-weight:600}
+.toggle button.on{background:var(--ink);color:#0a0a0b}
+.view{display:none}.view.on{display:block}
+.blocco{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+.blocco-h{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:var(--card2);border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+.blocco-h:hover{background:#222226}
+.blocco-t{font-weight:600;font-size:14.5px}
+.blocco-c{font-size:12px;color:var(--muted);margin-left:10px}
+.blocco-r{display:flex;gap:8px;align-items:center}
+.btn-blocco{background:var(--d-approva);color:#1a2e05;border:0;padding:6px 13px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700}
+.btn-blocco:hover{filter:brightness(1.1)}
+.chev{font-size:17px;color:var(--muted);transition:transform .2s}
+.blocco.col .chev{transform:rotate(-90deg)}
+.blocco.col .blocco-body{display:none}
+.op{border-bottom:1px solid var(--line);border-left:4px solid var(--stripe,#444);padding:13px 18px;transition:background .15s}
+.op:last-child{border-bottom:none}
+.op[data-badge="RINOMINA"]{--stripe:var(--b-rinomina)}
+.op[data-badge="SPOSTA"]{--stripe:var(--b-sposta)}
+.op[data-badge="MERGE"]{--stripe:var(--b-merge)}
+.op[data-badge="ELIMINA"]{--stripe:var(--b-elimina)}
+.op[data-badge="CREA"]{--stripe:var(--b-crea)}
+.op[data-badge="FLATTEN"]{--stripe:var(--b-flatten)}
+.op[data-badge="VERIFICA"]{--stripe:var(--b-verifica)}
+.op.s-approvata{background:rgba(168,205,136,.07)}
+.op.s-modificata{background:rgba(216,189,134,.08)}
+.op.s-verifica{background:rgba(208,160,196,.07)}
+.op.s-scartata{background:rgba(255,255,255,.02);opacity:.5}
+.op-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:6px}
+.badge{font-size:10.5px;font-weight:700;letter-spacing:.3px;color:#0a0a0b;padding:3px 10px;border-radius:11px;text-transform:uppercase}
+.bd-RINOMINA{background:var(--b-rinomina)}.bd-SPOSTA{background:var(--b-sposta)}
+.bd-MERGE{background:var(--b-merge)}.bd-ELIMINA{background:var(--b-elimina)}
+.bd-CREA{background:var(--b-crea)}.bd-FLATTEN{background:var(--b-flatten)}.bd-VERIFICA{background:var(--b-verifica)}
+.opid{font-size:11px;font-weight:700;color:var(--muted);background:#242428;border-radius:5px;padding:2px 7px}
+.conf{font-size:11px;color:var(--muted);margin-left:auto}.conf b{color:var(--ink)}
+.state-tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;display:none;color:#0a0a0b}
+.op.s-approvata .state-tag{display:inline;background:var(--d-approva);color:#16210a}
+.op.s-modificata .state-tag{display:inline;background:var(--d-modifica);color:#241c08}
+.op.s-verifica .state-tag{display:inline;background:var(--d-verifica);color:#2a1420}
+.op.s-scartata .state-tag{display:inline;background:var(--d-scarta);color:#15161a}
+.desc{font-size:13px}
+.desc .da{color:var(--muted);font-size:12px;margin-top:2px;word-break:break-all}
+.desc .a{font-size:12px;margin-top:2px;word-break:break-all}
+.desc .mot{color:#b89a86;font-size:11.5px;margin-top:4px;font-style:italic}
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.btn{border:1.5px solid var(--line);background:var(--card2);color:#cfcfd6;padding:5px 13px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;transition:all .12s}
+.btn:hover{border-color:#555}
+.btn.sel-ok{background:var(--d-approva);border-color:var(--d-approva);color:#16210a}
+.btn.sel-no{background:var(--d-scarta);border-color:var(--d-scarta);color:#15161a}
+.btn.sel-ver{background:var(--d-verifica);border-color:var(--d-verifica);color:#2a1420}
+.btn.sel-mod{background:var(--d-modifica);border-color:var(--d-modifica);color:#241c08}
+.btn-mod{color:#d6a72a;border-color:#5c4a12}
+.btn-com{color:#b8b8c0;border-color:#3a3a40}
+.has-mod{margin-top:7px;font-size:12px;background:#1b1b1e;border:1px solid var(--line);border-left:3px solid var(--d-modifica);border-radius:7px;padding:6px 10px;display:none;color:#cfcfd6;cursor:pointer}
+.has-mod.show{display:block}.has-mod b{color:var(--d-modifica)}
+.mod-annulla{float:right;font-size:10.5px;color:var(--muted)}
+.has-mod:hover .mod-annulla{color:var(--d-verifica)}
+.field{display:none;margin-top:9px}
+.field.open{display:block}
+.field input,.field textarea{width:100%;padding:7px 10px;border:1px solid #2a3f5f;background:#101015;color:var(--ink);border-radius:7px;font-size:13px;font-family:inherit}
+.field textarea{min-height:58px;resize:vertical}
+.field .fa{margin-top:6px;display:flex;gap:6px}
+.btn-sm{padding:4px 11px;font-size:12px;border-radius:7px;border:0;cursor:pointer;font-weight:600}
+.btn-save{background:var(--d-approva);color:#1a2e05}.btn-cancel{background:#3a3a40;color:#cfcfd6}
+.has-note{margin-top:7px;font-size:12px;background:#1b1b1e;border:1px solid var(--line);border-left:3px solid var(--d-modifica);border-radius:7px;padding:6px 10px;display:none;color:#cfcfd6;cursor:pointer}
+.has-note.show{display:block}.has-note b{color:var(--d-modifica)}
+.note-edit{float:right;font-size:10.5px;color:var(--muted);opacity:.8}
+.has-note:hover .note-edit{color:var(--d-modifica)}
+.scala-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.fascia{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px}
+.fascia .tag{font-size:10.5px;font-weight:700;color:#0a0a0b;padding:2px 8px;border-radius:10px}
+.t-att{background:var(--b-elimina)}.t-ric{background:var(--b-merge)}.t-rif{background:var(--b-rinomina)}.t-arc{background:#888}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#101013;border-top:1px solid var(--line);box-shadow:0 -4px 16px rgba(0,0,0,.4);padding:11px 24px;z-index:50}
+.bar .in{max-width:960px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pill{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+.p-ok{background:rgba(168,205,136,.16);color:#a8cd88}.p-no{background:#242428;color:var(--muted)}.p-ver{background:rgba(208,160,196,.16);color:#d0a0c4}.p-rem{color:var(--muted);font-size:12.5px}
+.bar .grp{margin-left:auto;display:flex;gap:8px}
+.bar .gen{background:var(--ink);color:#0a0a0b;border:0;padding:9px 16px;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px}
+.bar .rst{background:transparent;border:1px solid var(--line);color:var(--muted);padding:9px 13px;border-radius:9px;cursor:pointer;font-size:12.5px}
+.out{max-width:960px;margin:10px auto 0}
+.out textarea{width:100%;height:150px;border:1px solid var(--line);background:#0d0d10;color:var(--ink);border-radius:9px;padding:10px;font-family:ui-monospace,Menlo,monospace;font-size:12px;resize:vertical}
+.out .r{display:flex;gap:8px;align-items:center;margin-top:6px}
+.out .copy{background:#8aa0c0;color:#0a0a0b;border:0;padding:7px 14px;border-radius:8px;font-weight:600;cursor:pointer;font-size:12.5px}
+.out .hint{font-size:11.5px;color:var(--muted)}
+.hidden{display:none}
+.foot{margin-top:22px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+
+/* --- v1.2 albero interattivo (sostituisce l'ASCII nel before/after) --- */
+.ba .col{cursor:default}
+.ba .h{cursor:pointer}
+.ftree{margin-top:6px;max-height:340px;overflow:auto}
+.ftree .r{display:flex;align-items:center;gap:6px;height:22px;white-space:nowrap;border-radius:3px}
+.ftree .r:hover{background:#1c1c20}
+.ftree .r.d{cursor:pointer;user-select:none}
+.ftree .cv{width:11px;color:#9a9aa2;font-size:10px;text-align:center;flex:0 0 auto;transition:transform .1s}
+.ftree .node.collapsed>.children{display:none}
+.ftree .node.collapsed>.r .cv{transform:rotate(-90deg)}
+.ftree .nm{flex:1;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
+.ftree .f .nm{color:#a9adb5}
+.ftree .chg{color:var(--d-approva)!important;font-weight:600}
+.ftree .old{color:var(--b-elimina)!important}
+.ftree .note{color:var(--muted);font-size:11px;margin-left:6px}
+.ftree svg{flex:0 0 auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Proposta di Riorganizzazione · [NOME_PROGETTO]</h1>
+  <div class="sub">[SOTTOTITOLO] · cartella <span class="path">[PERCORSO]</span> · [DATA]</div>
+
+  <div class="box verdetto"><b>Verdetto: [VERDETTO_TITOLO].</b> [VERDETTO_TESTO]</div>
+
+  <!-- BEFORE / AFTER (solo cartelle) — fisarmonica: clic su un pannello lo espande, l'altro collassa a barra verticale -->
+  <div class="box-title" style="margin:2px 0 8px">Layout cartelle — attuale → proposto</div>
+  <div class="ba" id="ba">
+    <div class="col before" id="col-before">
+      <div class="vlabel">Partenza &#9656;</div>
+      <div class="full">
+      <div class="h" onclick="baClick('before')">Partenza <span class="hint">clic per allargare</span></div>
+      <!-- ALBERO SOLO-CARTELLE. Convenzione span: .lv1 anno/top · .lv2 sottocartella · .lv3 formati/nested · .br rami · .old nodo che cambia -->
+      <div class="ftree" id="ftree-before"></div>
+      </div>
+    </div>
+    <div class="col after" id="col-after">
+      <div class="vlabel">&#9666; Proposto</div>
+      <div class="full">
+      <div class="h aft" onclick="baClick('after')">Proposto <span class="hint">clic per allargare</span></div>
+      <!-- usa .chg per evidenziare i nodi che cambiano -->
+      <div class="ftree" id="ftree-after"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIEPILOGO: sottocartelle · file · peso totale · estensioni -->
+  <div class="riep">
+    <div class="stat"><div class="n">[N_SOTTOCARTELLE]</div><div class="l">Sottocartelle</div></div>
+    <div class="stat"><div class="n">[N_FILE]</div><div class="l">File totali</div></div>
+    <div class="stat"><div class="n">[PESO]</div><div class="l">Peso totale</div></div>
+    <div class="ext">
+      <div class="l">File per estensione</div>
+      <span class="chip">[ext] <b>[n]</b></span><!-- ripeti per estensione -->
+    </div>
+  </div>
+
+  <!-- BARRA DECISE -->
+  <div class="prog">
+    <span class="lbl">Decise</span>
+    <div class="track"><div class="fill" id="fill"></div></div>
+    <span class="pct" id="pct">0 / 0</span>
+  </div>
+
+  <!-- KPI per azione proposta -->
+  <div class="kpis">
+    <div class="kpi"><div class="n" style="color:var(--b-rinomina)">[N]</div><div class="l">Rinomina</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-sposta)">[N]</div><div class="l">Sposta</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-merge)">[N]</div><div class="l">Merge</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-elimina)">[N]</div><div class="l">Elimina</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-crea)">[N]</div><div class="l">Crea</div></div>
+    <div class="kpi"><div class="n" style="color:var(--b-verifica)">[N]</div><div class="l">Verifica</div></div>
+  </div>
+
+  <!-- (opzionale) toggle tassonomia 2 strati: Mappa entità×dominio / Scala di attività -->
+
+  <!-- ===== BLOCCO AZIONI ===== (data-kind="azione": approvabili) -->
+  <div class="blocco" id="blocco-azioni">
+    <div class="blocco-h" onclick="toggleBlocco('blocco-azioni')">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="blocco-t">[TITOLO BLOCCO]</span>
+        <span class="blocco-c" id="c-blocco-azioni">0 / 0 decise</span>
+      </div>
+      <div class="blocco-r">
+        <button class="btn-blocco" onclick="event.stopPropagation();approvaBlocco('blocco-azioni')">APPROVA TUTTO IL BLOCCO</button>
+        <span class="chev">&#9662;</span>
+      </div>
+    </div>
+    <div class="blocco-body">
+
+      <!-- RIGA-ESEMPIO con MODIFICA: replica per ogni op. id univoco; data-badge tra RINOMINA/SPOSTA/MERGE/ELIMINA/CREA/FLATTEN -->
+      <div class="op" id="OP1" data-badge="RINOMINA" data-blocco="blocco-azioni" data-kind="azione">
+        <div class="op-top"><span class="opid">OP1</span><span class="badge bd-RINOMINA">Rinomina</span>
+          <span class="state-tag"></span><span class="conf">conf <b>0.00</b></span></div>
+        <div class="desc">
+          <div>Da: <span class="path">[origine]</span></div>
+          <div class="a">A: <span class="path" id="val-OP1">[destinazione proposta]</span></div>
+          <div class="mot">[motivazione]</div>
+        </div>
+        <div class="row-actions">
+          <button class="btn b-ok" onclick="setAz('OP1','approvata')">Approva</button>
+          <button class="btn b-no" onclick="setAz('OP1','scartata')">Scarta</button>
+          <button class="btn btn-mod" onclick="toggleField('OP1','mod')">Modifica</button>
+          <button class="btn btn-com" onclick="toggleField('OP1','com')">Commenta</button>
+        </div>
+        <div class="field" id="mod-OP1"><input type="text" value="[destinazione proposta]">
+          <div class="fa"><button class="btn-sm btn-save" onclick="saveMod('OP1')">Conferma modifica</button><button class="btn-sm btn-cancel" onclick="toggleField('OP1','mod')">Annulla</button></div></div>
+        <div class="field" id="com-OP1"><textarea placeholder="Nota…"></textarea>
+          <div class="fa"><button class="btn-sm btn-save" onclick="saveNote('OP1')">Salva nota</button><button class="btn-sm btn-cancel" onclick="toggleField('OP1','com')">Annulla</button></div></div>
+        <div class="has-mod" id="modrow-OP1"></div>
+        <div class="has-note" id="note-OP1"></div>
+      </div>
+
+      <!-- RIGA-ESEMPIO senza MODIFICA (CREA/ELIMINA/MERGE): ometti il bottone Modifica, il campo mod- e la riga modrow- -->
+
+    </div>
+  </div>
+
+  <!-- ===== BLOCCO VERIFICHE ===== (data-kind="verifica": NO approva-tutto, solo "segna tutte da verificare") -->
+  <div class="blocco" id="blocco-verifiche">
+    <div class="blocco-h" onclick="toggleBlocco('blocco-verifiche')">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="blocco-t">Verifiche — gate manuale</span>
+        <span class="blocco-c" id="c-blocco-verifiche">0 / 0 decise</span>
+      </div>
+      <div class="blocco-r">
+        <button class="btn-blocco" style="background:var(--d-verifica);color:#2a1420" onclick="event.stopPropagation();verificaBlocco('blocco-verifiche')">SEGNA TUTTE DA VERIFICARE</button>
+        <span class="chev">&#9662;</span>
+      </div>
+    </div>
+    <div class="blocco-body">
+      <div class="op" id="V1" data-badge="VERIFICA" data-blocco="blocco-verifiche" data-kind="verifica">
+        <div class="op-top"><span class="opid">V1</span><span class="badge bd-VERIFICA">Verifica</span><span class="state-tag"></span></div>
+        <div class="desc"><div><strong>[oggetto]</strong></div><div class="mot">[perché va verificato]</div></div>
+        <div class="row-actions">
+          <button class="btn b-ver" onclick="setAz('V1','verifica')">Da verificare</button>
+          <button class="btn b-no" onclick="setAz('V1','scartata')">Ignora</button>
+          <button class="btn btn-com" onclick="toggleField('V1','com')">Nota</button>
+        </div>
+        <div class="field" id="com-V1"><textarea placeholder="Come gestire questo punto…"></textarea>
+          <div class="fa"><button class="btn-sm btn-save" onclick="saveNote('V1')">Salva nota</button><button class="btn-sm btn-cancel" onclick="toggleField('V1','com')">Annulla</button></div></div>
+        <div class="has-note" id="note-V1"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Dry-run puro — nessun file toccato. MERGE/ELIMINA sempre a gate con doppia conferma. Badge canonici v1.1.</div>
+</div>
+
+<!-- ===== BARRA DECISIONI ===== -->
+<div class="bar">
+  <div class="in">
+    <span class="pill p-ok"><span id="t-ok">0</span> approva</span>
+    <span class="pill p-ver"><span id="t-ver">0</span> verifica</span>
+    <span class="pill p-no"><span id="t-no">0</span> scarta</span>
+    <span class="p-rem">&middot; <b id="t-rem">0</b> da decidere</span>
+    <div class="grp">
+      <button class="rst" onclick="resetAll()">Azzera</button>
+      <button class="gen" onclick="genera()">Genera decisioni</button>
+    </div>
+  </div>
+  <div class="out hidden" id="out">
+    <textarea id="outtext" readonly></textarea>
+    <div class="r"><button class="copy" onclick="copyOut(this)">Copia</button>
+      <span class="hint" id="outhint">Incolla in chat per l'esecuzione (solo le azioni approvate).</span></div>
+  </div>
+</div>
+
+<script>
+// KEY univoco per progetto (persistenza scelte tra riaperture)
+const KEY='[PROGETTO]_widget';
+// LAB: etichetta breve per ogni op id (usata in "Genera decisioni"). Claude la popola.
+const LAB={ OP1:'OP1 …', V1:'V1 …' };
+let st={};
+function load(){
+  document.querySelectorAll('.op[id]').forEach(o=>{ st[o.id]={az:'neutro',mod:null,note:null};
+    const v=document.getElementById('val-'+o.id); if(v)st[o.id].origVal=v.textContent; });
+  const s=JSON.parse(localStorage.getItem(KEY)||'{}');
+  Object.keys(s).forEach(id=>{ if(st[id])st[id]=Object.assign(st[id],s[id]); });
+  Object.keys(st).forEach(render); update();
+}
+function save(){ localStorage.setItem(KEY,JSON.stringify(st)); }
+function render(id){
+  const o=document.getElementById(id); if(!o)return; const s=st[id];
+  o.className='op'+(s.az!=='neutro'?(' s-'+s.az):'');
+  const tag=o.querySelector('.state-tag');
+  tag.textContent={approvata:'✓ Approvata',scartata:'Scartata',modificata:'✎ Modificata',verifica:'Da verificare'}[s.az]||'';
+  o.querySelectorAll('.b-ok,.b-no,.b-ver,.btn-mod').forEach(b=>b.classList.remove('sel-ok','sel-no','sel-ver','sel-mod'));
+  if(s.az==='approvata'){const b=o.querySelector('.b-ok'); if(b)b.classList.add('sel-ok');}
+  if(s.az==='modificata'){const b=o.querySelector('.btn-mod'); if(b)b.classList.add('sel-mod');}
+  if(s.az==='scartata'){const b=o.querySelector('.b-no'); if(b)b.classList.add('sel-no');}
+  if(s.az==='verifica'){const b=o.querySelector('.b-ver'); if(b)b.classList.add('sel-ver');}
+  if(s.mod){ const v=document.getElementById('val-'+id); if(v)v.textContent=s.mod; }
+  const mb=document.getElementById('modrow-'+id);
+  if(mb){
+    if(s.az==='modificata'&&s.mod){
+      mb.innerHTML='<b>Modifica confermata:</b> '+(s.origVal?(s.origVal+' → '):'')+s.mod+' <span class="mod-annulla">↺ annulla modifica</span>';
+      mb.classList.add('show'); mb.onclick=()=>openField(id,'mod');
+      const an=mb.querySelector('.mod-annulla'); if(an)an.onclick=(e)=>{ e.stopPropagation(); annullaMod(id); };
+    } else { mb.classList.remove('show'); mb.onclick=null; }
+  }
+  const nb=document.getElementById('note-'+id);
+  if(s.note){ nb.innerHTML='<b>Nota:</b> '+s.note+' <span class="note-edit">✎ modifica</span>'; nb.classList.add('show'); nb.onclick=()=>openField(id,'com'); }
+  else { nb.classList.remove('show'); nb.onclick=null; }
+}
+function setAz(id,az){ st[id].az=(st[id].az===az?'neutro':az); save(); render(id); update(); }
+function openField(id,k){ const f=document.getElementById(k+'-'+id); if(!f)return;
+  if(k==='com'){ const t=f.querySelector('textarea'); if(t)t.value=st[id].note||''; }
+  if(k==='mod'){ const i=f.querySelector('input'); if(i&&st[id].mod)i.value=st[id].mod; }
+  f.classList.add('open'); const fld=f.querySelector('textarea,input'); if(fld)fld.focus(); }
+function toggleField(id,k){ const f=document.getElementById(k+'-'+id); if(!f)return;
+  if(f.classList.contains('open')){ f.classList.remove('open'); } else { openField(id,k); } }
+function saveMod(id){ const f=document.getElementById('mod-'+id); const i=f.querySelector('input');
+  if(i)st[id].mod=i.value; st[id].az='modificata'; f.classList.remove('open'); save(); render(id); update(); }
+function annullaMod(id){ st[id].mod=null; st[id].az='neutro';
+  const v=document.getElementById('val-'+id); if(v&&st[id].origVal!=null)v.textContent=st[id].origVal;
+  const f=document.getElementById('mod-'+id); if(f){ const i=f.querySelector('input'); if(i&&st[id].origVal!=null)i.value=st[id].origVal; f.classList.remove('open'); }
+  save(); render(id); update(); }
+function saveNote(id){ const f=document.getElementById('com-'+id); const t=f.querySelector('textarea');
+  const v=t?t.value.trim():''; st[id].note=v||null; f.classList.remove('open'); save(); render(id); update(); }
+function approvaBlocco(b){ document.querySelectorAll('.op[data-blocco="'+b+'"][data-kind="azione"]').forEach(o=>{ st[o.id].az='approvata'; render(o.id); }); save(); update(); }
+function verificaBlocco(b){ document.querySelectorAll('.op[data-blocco="'+b+'"][data-kind="verifica"]').forEach(o=>{ st[o.id].az='verifica'; render(o.id); }); save(); update(); }
+let baState='both';
+function baClick(name){ baState=(baState==='both'?name:'both');
+  const ba=document.getElementById('ba'), cb=document.getElementById('col-before'), ca=document.getElementById('col-after');
+  ba.classList.remove('show-before','show-after'); cb.classList.remove('collapsed'); ca.classList.remove('collapsed');
+  if(baState==='before'){ ba.classList.add('show-before'); ca.classList.add('collapsed'); }
+  else if(baState==='after'){ ba.classList.add('show-after'); cb.classList.add('collapsed'); }
+}
+function toggleBlocco(id){ document.getElementById(id).classList.toggle('col'); }
+function update(){
+  let ok=0,no=0,ver=0;
+  Object.values(st).forEach(s=>{ if(s.az==='approvata'||s.az==='modificata')ok++; else if(s.az==='scartata')no++; else if(s.az==='verifica')ver++; });
+  const tot=Object.keys(st).length, dec=ok+no+ver;
+  // NB: id con trattino -> SEMPRE getElementById (mai variabili globali)
+  document.getElementById('t-ok').textContent=ok;
+  document.getElementById('t-no').textContent=no;
+  document.getElementById('t-ver').textContent=ver;
+  document.getElementById('t-rem').textContent=tot-dec;
+  document.getElementById('pct').textContent=dec+' / '+tot;
+  document.getElementById('fill').style.width=(tot?Math.round(dec/tot*100):0)+'%';
+  document.querySelectorAll('.blocco[id]').forEach(b=>{
+    const r=document.querySelectorAll('.op[data-blocco="'+b.id+'"]');
+    const d=Array.from(r).filter(x=>st[x.id]&&st[x.id].az!=='neutro').length;
+    const c=document.getElementById('c-'+b.id); if(c)c.textContent=d+' / '+r.length+' decise';
+  });
+}
+function genera(){
+  const ok=[],no=[],ver=[];
+  Object.keys(st).forEach(id=>{ const s=st[id];
+    const note=s.note?(' [nota: '+s.note+']'):''; const mod=s.mod?(' → '+s.mod):'';
+    if(s.az==='approvata'||s.az==='modificata')ok.push((LAB[id]||id)+mod+note);
+    else if(s.az==='verifica')ver.push((LAB[id]||id)+note);
+    else if(s.az==='scartata')no.push((LAB[id]||id)+note); });
+  const data=new Date().toLocaleDateString('it-IT');
+  let t='# Decisioni — [NOME_PROGETTO] · '+data+'\n';
+  t+='\nPROCEDI (esegui): '+(ok.length?ok.join('; '):'—');
+  t+='\nVERIFICA insieme: '+(ver.length?ver.join('; '):'—');
+  t+='\nSCARTA: '+(no.length?no.join('; '):'—');
+  t+='\n\n--- dettaglio (salvabile come riorg_risposte.md) ---\n\n';
+  Object.keys(st).forEach(id=>{ const s=st[id]; const o=document.getElementById(id);
+    const d=o.querySelector('.desc'); const desc=d?d.innerText.replace(/\s+/g,' ').trim():id;
+    t+='## '+id+' — '+o.dataset.badge+'\nAzione: '+s.az.toUpperCase()+'\nDescrizione: '+desc+'\n';
+    if(s.mod)t+='Valore modificato: '+s.mod+'\n'; if(s.note)t+='Nota: '+s.note+'\n'; t+='\n'; });
+  showOut(t,'Incolla in chat per eseguire, oppure salva come riorg_risposte.md (Step 3).');
+}
+function showOut(t,hint){ const o=document.getElementById('out'); o.classList.remove('hidden');
+  document.getElementById('outtext').value=t; document.getElementById('outhint').textContent=hint;
+  o.scrollIntoView({behavior:'smooth'}); }
+function copyOut(btn){
+  const ta=document.getElementById('outtext');
+  ta.removeAttribute('readonly'); ta.focus(); ta.select(); ta.setSelectionRange(0,ta.value.length);
+  let done=false; try{ done=document.execCommand('copy'); }catch(e){}
+  ta.setAttribute('readonly','');
+  const flash=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copiato ✓'; setTimeout(()=>btn.textContent=o,1400); } };
+  if(done){ flash(); }
+  else if(navigator.clipboard){ navigator.clipboard.writeText(ta.value).then(flash).catch(()=>{ if(btn)btn.textContent='Seleziona e copia a mano'; }); }
+  else if(btn){ btn.textContent='Seleziona e copia a mano'; }
+}
+function resetAll(){ st={}; localStorage.removeItem(KEY); document.getElementById('out').classList.add('hidden'); load(); }
+function sw(w){ document.getElementById('v-arch').classList.toggle('on',w==='arch');
+  document.getElementById('v-vista').classList.toggle('on',w==='vista');
+  document.getElementById('t-arch').classList.toggle('on',w==='arch');
+  document.getElementById('t-vista').classList.toggle('on',w==='vista'); }
+
+// ===== v1.2 ALBERO INTERATTIVO (before/after) - Claude POPOLA i due array =====
+// riga: [profondita, tipo, nome, nota?]   tipo: 'd' cartella | 'dg' cambia (verde) | 'old' sparisce (rosso) | 'f' file
+const TREE_BEFORE = [ /* [0,'d','ROOT/'], [1,'old','_VecchiaCartella/','nota'], ... */ ];
+const TREE_AFTER  = [ /* [0,'d','ROOT/'], [1,'dg','00_NUOVA/','nota'], ... */ ];
+const _FD="<svg viewBox='0 0 24 24' width='14' height='14'><path fill='#e0a92e' d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z'/></svg>";
+const _FG="<svg viewBox='0 0 24 24' width='14' height='14'><path fill='#83c994' d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z'/></svg>";
+const _FR="<svg viewBox='0 0 24 24' width='14' height='14'><path fill='#dc9690' d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z'/></svg>";
+const _FF="<svg viewBox='0 0 24 24' width='12' height='12'><path fill='#8a8f98' d='M6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z'/></svg>";
+function tgf(el){ var n=el.closest('.node'); if(n) n.classList.toggle('collapsed'); }
+function buildFTree(elId,data){
+  var c=document.getElementById(elId); if(!c||!data||!data.length) return; c.innerHTML='';
+  var stack={0:c};
+  data.forEach(function(x){
+    var depth=x[0],type=x[1],name=x[2],note=x[3]||'',pad=4+depth*17,parent=stack[depth]||c;
+    if(type==='f'){
+      var r=document.createElement('div'); r.className='r f'; r.style.paddingLeft=pad+'px';
+      r.innerHTML="<span class='cv'>&nbsp;</span>"+_FF+"<span class='nm'>"+name+"</span>"+(note?"<span class='note'>"+note+"</span>":"");
+      parent.appendChild(r); return;
+    }
+    var ico=type==='dg'?_FG:type==='old'?_FR:_FD, cls=type==='dg'?'chg':type==='old'?'old':'';
+    var node=document.createElement('div'); node.className='node';
+    var r=document.createElement('div'); r.className='r d'; r.style.paddingLeft=pad+'px'; r.setAttribute('onclick','tgf(this)');
+    r.innerHTML="<span class='cv'>&#9662;</span>"+ico+"<span class='nm "+cls+"'>"+name+"</span>"+(note?"<span class='note'>"+note+"</span>":"");
+    var ch=document.createElement('div'); ch.className='children';
+    node.appendChild(r); node.appendChild(ch); parent.appendChild(node); stack[depth+1]=ch;
+  });
+}
+buildFTree('ftree-before',TREE_BEFORE);
+buildFTree('ftree-after',TREE_AFTER);
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,71 @@
+name: bench
+
+# Collaudo su tre sistemi: correttezza (17 controlli del bench) + prestazioni su una cartella sintetica.
+# Ogni pull request deve passare su Linux, Windows e macOS.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: ${{ matrix.os }} · Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.x"]
+        include:
+          - os: ubuntu-latest
+            python: "3.9"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Controlli statici del pacchetto
+        run: python tests/validate_skill.py
+
+      - name: Ambiente
+        run: python archivio-riorganizzatore/scripts/riorg.py env "${{ runner.temp }}"
+
+      - name: Bench small
+        run: python archivio-riorganizzatore/scripts/riorg.py bench --work "${{ runner.temp }}/bench_small"
+
+      - name: Bench medium
+        run: python archivio-riorganizzatore/scripts/riorg.py bench --work "${{ runner.temp }}/bench_medium" --scale medium
+
+      - name: Script PowerShell — parse (Windows PowerShell 5.1)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem archivio-riorganizzatore\scripts, tests -Filter *.ps1 | ForEach-Object {
+            $e = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$e)
+            "{0,-22} errori: {1}" -f $_.Name, $e.Count; $bad += $e.Count }
+          if ($bad) { exit 1 }
+
+      - name: Quarantena e undo con execute.ps1 / undo.ps1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\test_quarantena.ps1 -S archivio-riorganizzatore\scripts
+
+      - name: Bench con confronto PowerShell
+        if: runner.os == 'Windows'
+        run: python archivio-riorganizzatore/scripts/riorg.py bench --work "${{ runner.temp }}/bench_ps" --compare-ps archivio-riorganizzatore/scripts
+
+      - name: Zip riproducibile
+        run: python tools/build_zip.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-${{ matrix.os }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/bench_*/bench_*.json
+          if-no-files-found: warn
